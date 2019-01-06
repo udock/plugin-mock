@@ -1,6 +1,5 @@
 {
   "name": "@udock/plugin-mock",
-  "private": true,
   "version": "0.0.1",
   "main": "dist/index.umd.js",
   "module": "dist/index.esm.js",
@@ -21,5 +20,6 @@
   },
   "devDependencies": {
     "@udock/build-tools": "^0.0.2"
-  }
+  },
+  "license": "MIT"
 }
