@@ -96,7 +96,7 @@ export default {
           } catch (e) {
             // 尝试根据请求路径精确匹配,并获取对应的模拟数据配置文件失败
             // 尝试匹配默认模拟数据配置文件
-            let def = path.resolve(`${hostname}${url}`, '..', '_').substr(1)
+            let def = path.relative('.', path.resolve(`${hostname}${url}`, '..', '_'))
             while (!mockData) {
               try {
                 const mockConf = matching(options.load(def), request)
@@ -108,7 +108,7 @@ export default {
                 }
               } catch (e) {}
               if (def === '_') { break }
-              def = path.resolve(def, '..', '..', '_').substr(1)
+              def = path.relative('.', path.resolve(def, '..', '..', '_'))
             }
           }
         }
