@@ -31,6 +31,7 @@ function getQuery (request) {
 }
 
 function matching (confs, req) {
+  if (confs == false) throw {}
   for (let i=0, n=confs.length; i<n; i++) {
     const conf = confs[i]
     if (valid(conf.request, req, true).length === 0) {
@@ -68,7 +69,11 @@ export default {
         request = defaults({query: getQuery(request)}, request)
         if (config.global.enabled !== false) {
           url = wurl('path', request.url).replace(/\/$/, '/index')
-          hostname = wurl('host', request.url)
+          hostname = wurl('hostname', request.url).replace(/^www\./, '')
+          const port = parseInt(wurl('port', request.url))
+          if (port !==80 && port !== 443) {
+            hostname += `:${port}`
+          }
           if (hostname) {
             if (config.third_party.enabled === false) {
               hostname = undefined
