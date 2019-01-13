@@ -68,7 +68,7 @@ export default {
         request = defaults({query: getQuery(request)}, request)
         if (config.global.enabled !== false) {
           url = wurl('path', request.url).replace(/\/$/, '/index')
-          hostname = wurl('hostname', request.url)
+          hostname = wurl('host', request.url)
           if (hostname) {
             if (config.third_party.enabled === false) {
               hostname = undefined
