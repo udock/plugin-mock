@@ -12,7 +12,9 @@ import Mock from 'mockjs'
 import './mockjs.patch'
 
 function valid (rule, data, unstrict) {
-  if (unstrict) {
+  if (!rule) {
+    return []
+  } else if (unstrict) {
     let eg = Mock.mock(rule)
     let ex = pickBy(data, (value, key) => !has(eg, key))
     return Mock.valid(merge({}, rule, ex), data)
@@ -50,7 +52,11 @@ function mockWithContext (template, context) {
   return Mock.Handler.gen(template, undefined, {root: context})
 }
 
+const mockErr = new Error()
+const useProxy = new Error()
+
 export default {
+  useProxy,
   install (framework, options) {
     const config = defaults(options.load('config'), {
       global: {},
@@ -59,7 +65,6 @@ export default {
       bridge: {}
     })
     function mock (axios) {
-      const mockErr = new Error()
       axios.interceptors.request.use((request) => {
         let hostname
         let url
@@ -117,6 +122,9 @@ export default {
             }
           }
         }
+        if (options.useProxy) {
+          mockData = mockData || {useProxy}
+        }
         if (mockData) {
           console.log(`mock: ${request.url}`)
           throw merge({url: mockErr, request}, config.global, defaultConf, mockData)
@@ -127,6 +135,9 @@ export default {
 
       axios.interceptors.response.use(null, (error) => {
         if (error.url === mockErr) {
+          if (error.useProxy === useProxy) {
+            return Promise.reject(useProxy)
+          }
           // return Promise.resolve(error)
           return new Promise((resolve, reject) => {
             const timeout = error.request.timeout || axios.defaults.timeout || 240000
