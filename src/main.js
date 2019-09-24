@@ -58,6 +58,7 @@ function valid (rule, data) {
       // 解析 JSON
       try {
         body = JSON.parse(body)
+        data.body = body
       } catch (e) {}
 
       if (typeof body === 'string') {
