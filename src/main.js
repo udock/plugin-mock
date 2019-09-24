@@ -12,15 +12,65 @@ import Mock from 'mockjs'
 import convert from 'xml-js'
 import './mockjs.patch'
 
-function valid (rule, data, unstrict) {
+function looseValid (rule, data) {
+  const eg = Mock.mock(rule)
+  const ex = pickBy(data, (_, key) => !has(eg, key))
+  const items = Mock.valid(merge({}, rule, ex), data)
+  return items
+}
+
+function valid (rule, data) {
   if (!rule) {
-    return []
-  } else if (unstrict) {
-    let eg = Mock.mock(rule)
-    let ex = pickBy(data, (value, key) => !has(eg, key))
-    return Mock.valid(merge({}, rule, ex), data)
+    return true
   } else {
-    return Mock.valid(rule, data)
+    // 匹配 method
+    if (!data.method.match(typeof rule.method === 'string'
+      ? rule.method.toLowerCase()
+      : rule.method)
+    ) {
+      return false
+    }
+
+    // 匹配 headers，只要包含所有规则项就算匹配
+    if (rule.headers) {
+      const items = looseValid(rule.headers, data.headers)
+      if (items.length > 0) {
+        return false
+      }
+    }
+
+    // 匹配 query
+    if (rule.query) {
+      const items = looseValid(rule.query, data.query)
+      if (items.length > 0) {
+        return false
+      }
+    }
+
+    // 匹配 data
+    if (rule.data) {
+      let body = data.data.toString()
+      if (rule._format === 'xml') {
+        // 解析 xml
+        body = convert.xml2json(body, {compact: true})
+      }
+
+      // 解析 JSON
+      try {
+        body = JSON.parse(body)
+      } catch (e) {}
+
+      if (typeof body === 'string') {
+        return body.match(rule.data)
+      } else {
+        const items = looseValid(rule.data, body)
+        if (items.length > 0) {
+          return false
+        }
+      }
+    }
+
+    return true
   }
 }
 
@@ -37,7 +87,7 @@ function matching (confs, req) {
   if (confs == false) throw {}
   for (let i=0, n=confs.length; i<n; i++) {
     const conf = confs[i]
-    if (valid(conf.request, req, true).length === 0) {
+    if (valid(conf.request, req)) {
       return conf
     }
   }
