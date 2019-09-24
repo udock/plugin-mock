@@ -9,6 +9,7 @@ import path from 'path'
 import axios from 'axios'
 import wurl from 'wurl'
 import Mock from 'mockjs'
+import convert from 'xml-js'
 import './mockjs.patch'
 
 function valid (rule, data, unstrict) {
@@ -49,7 +50,15 @@ function mockWithContext (template, context) {
   //     mapValues(context, (val) => () => val)
   //   )
   // ).response
-  return Mock.Handler.gen(template, undefined, {root: context})
+  const response = Mock.Handler.gen(template, undefined, {root: context})
+  if (response._format === 'xml') {
+    response.data = convert.json2xml(response.data, {
+      compact: true,
+      spaces: 4
+    })
+    delete response._format
+  }
+  return response
 }
 
 const mockErr = new Error()
