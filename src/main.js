@@ -1,5 +1,6 @@
 import extend from 'lodash/extend'
 import isObject from 'lodash/isObject'
+import isFunction from 'lodash/isFunction'
 import mapValues from 'lodash/mapValues'
 import defaults from 'lodash/defaults'
 import merge from 'lodash/merge'
@@ -50,9 +51,14 @@ function valid (rule, data) {
     // 匹配 data
     if (rule.data) {
       let body = data.data.toString()
-      if (rule._format === 'xml') {
-        // 解析 xml
-        body = convert.xml2json(body, {compact: true})
+      if (rule._format) {
+        if (isFunction(rule._format)) {
+          // 自定义请求报文解析
+          body = rule._format(body)
+        } else if (rule._format === 'xml') {
+          // 解析 xml
+          body = convert.xml2json(body, {compact: true})
+        }
       }
 
       // 解析 JSON
@@ -101,15 +107,32 @@ function mockWithContext (template, context) {
   //     mapValues(context, (val) => () => val)
   //   )
   // ).response
-  const response = Mock.Handler.gen(template, undefined, {root: context})
-  if (response._format === 'xml') {
-    response.data = convert.json2xml(response.data, {
-      compact: true,
-      spaces: 4
-    })
-    delete response._format
+  const _format = template._format
+  delete template._format
+  try {
+    const response = Mock.Handler.gen(template, undefined, {root: context})
+    if (_format) {
+      if (isFunction(_format)) {
+        // 自定义响应输出
+        response.data = _format(response.data)
+      } else if (_format === 'xml') {
+        // xml 格式
+        response.data = convert.json2xml(response.data, {
+          compact: true,
+          spaces: 2
+        })
+      }
+    }
+    return response
+  } catch (e) {
+    return { time_cost: 200,
+      status: 500,
+      header: {},
+      data: JSON.stringify({
+        error: `respone temmplate error: ${e.message}`
+      })
+    }
   }
-  return response
 }
 
 const mockErr = new Error()
