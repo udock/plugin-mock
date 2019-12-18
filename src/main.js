@@ -1,6 +1,7 @@
 import extend from 'lodash/extend'
 import isObject from 'lodash/isObject'
 import isFunction from 'lodash/isFunction'
+import isUndefined from 'lodash/isUndefined'
 import mapValues from 'lodash/mapValues'
 import defaults from 'lodash/defaults'
 import merge from 'lodash/merge'
@@ -14,10 +15,14 @@ import convert from 'xml-js'
 import './mockjs.patch'
 
 function looseValid (rule, data) {
-  const eg = Mock.mock(rule)
-  const ex = pickBy(data, (_, key) => !has(eg, key))
-  const items = Mock.valid(merge({}, rule, ex), data)
-  return items
+  if (isFunction(rule)) {
+    return rule(data)
+  } else {
+    const eg = Mock.mock(rule)
+    const ex = pickBy(data, (_, key) => !has(eg, key))
+    const items = Mock.valid(merge({}, rule, ex), data)
+    return items
+  }
 }
 
 function valid (rule, data) {
@@ -32,9 +37,20 @@ function valid (rule, data) {
       return false
     }
 
+    const hasCustomValid = isFunction(rule._valid)
+    const _valid = (type, template, data) => {
+      if (hasCustomValid) {
+        const result = rule._valid(type, template, data, looseValid)
+        if (!isUndefined(result)) {
+          return result
+        }
+      }
+      return looseValid(template, data)
+    }
+
     // 匹配 headers，只要包含所有规则项就算匹配
     if (rule.headers) {
-      const items = looseValid(rule.headers, data.headers)
+      const items = _valid('headers', rule.headers, data.headers)
       if (items.length > 0) {
         return false
       }
@@ -42,7 +58,7 @@ function valid (rule, data) {
 
     // 匹配 query
     if (rule.query) {
-      const items = looseValid(rule.query, data.query)
+      const items = _valid('query', rule.query, data.query)
       if (items.length > 0) {
         return false
       }
@@ -52,12 +68,24 @@ function valid (rule, data) {
     if (rule.data) {
       let body = data.data.toString()
       if (rule._format) {
-        if (isFunction(rule._format)) {
-          // 自定义请求报文解析
-          body = rule._format(body)
-        } else if (rule._format === 'xml') {
-          // 解析 xml
-          body = convert.xml2json(body, {compact: true})
+        try {
+          if (isFunction(rule._format)) {
+            // 自定义请求报文解析
+            body = rule._format(body)
+          } else if (rule._format === 'xml') {
+            // 解析 xml
+            body = convert.xml2json(body, {compact: true})
+          }
+        } catch (e) {
+          return {
+            response: {
+              status: 400,
+              header: {},
+              data: JSON.stringify({
+                error: `request parse error: ${e.message}`
+              })
+            }
+          }
         }
       }
 
@@ -70,7 +98,7 @@ function valid (rule, data) {
       if (typeof body === 'string') {
         return body.match(rule.data)
       } else {
-        const items = looseValid(rule.data, body)
+        const items = _valid('data', rule.data, body)
         if (items.length > 0) {
           return false
         }
@@ -94,8 +122,10 @@ function matching (confs, req) {
   if (confs == false) throw {}
   for (let i=0, n=confs.length; i<n; i++) {
     const conf = confs[i]
-    if (valid(conf.request, req)) {
-      return conf
+    if (conf === false || (!conf.request && !conf.response)) continue
+    const ret = valid(conf.request, req)
+    if (ret) {
+      return ret === true ? conf : ret
     }
   }
 }
@@ -107,9 +137,13 @@ function mockWithContext (template, context) {
   //     mapValues(context, (val) => () => val)
   //   )
   // ).response
+  template = merge({}, template)
   const _format = template._format
   delete template._format
   try {
+    template = mapValues(template, val => {
+      return isFunction(val) ? val({ context: {root: context} }) : val
+    })
     const response = Mock.Handler.gen(template, undefined, {root: context})
     if (_format) {
       if (isFunction(_format)) {
@@ -244,6 +278,6 @@ export default {
         }
       })
     }
-    mock(axios)
+    mock(options.axios || axios)
   }
 }

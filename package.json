@@ -1,6 +1,6 @@
 {
   "name": "@udock/plugin-mock",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "main": "dist/index.umd.js",
   "module": "dist/index.esm.js",
   "files": [
