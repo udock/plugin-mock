@@ -19,8 +19,8 @@ function looseValid (rule, data) {
     return rule(data)
   } else {
     const eg = Mock.mock(rule)
-    const ex = pickBy(data, (_, key) => !has(eg, key))
-    const items = Mock.valid(merge({}, rule, ex), data)
+    const toCheck = pickBy(data, (_, key) => has(eg, key))
+    const items = Mock.valid(rule, toCheck)
     return items
   }
 }
@@ -58,6 +58,9 @@ function valid (rule, data) {
 
     // 匹配 query
     if (rule.query) {
+      for (const key in rule.query) {
+        rule.query[key] += '' // 转成字符串
+      }
       const items = _valid('query', rule.query, data.query)
       if (items.length > 0) {
         return false
@@ -80,7 +83,6 @@ function valid (rule, data) {
           return {
             response: {
               status: 400,
-              header: {},
               data: JSON.stringify({
                 error: `request parse error: ${e.message}`
               })
@@ -144,7 +146,12 @@ function mockWithContext (template, context) {
     template = mapValues(template, val => {
       return isFunction(val) ? val({ context: {root: context} }) : val
     })
-    const response = Mock.Handler.gen(template, undefined, {root: context})
+    const response = defaults(
+      Mock.Handler.gen(template, undefined, {root: context}),
+      {
+        status: 200
+      }
+    )
     if (_format) {
       if (isFunction(_format)) {
         // 自定义响应输出
@@ -161,7 +168,6 @@ function mockWithContext (template, context) {
   } catch (e) {
     return { time_cost: 200,
       status: 500,
-      header: {},
       data: JSON.stringify({
         error: `respone temmplate error: ${e.message}`
       })
@@ -171,6 +177,7 @@ function mockWithContext (template, context) {
 
 const mockErr = new Error()
 const useProxy = new Error()
+const originalAxios = axios.create()
 
 export default {
   useProxy,
@@ -244,7 +251,7 @@ export default {
         }
         if (mockData) {
           console.log(`mock: ${request.url}`)
-          throw merge({url: mockErr, request}, config.global, defaultConf, mockData)
+          throw merge({url: mockErr, request, originalRequest}, config.global, defaultConf, mockData)
         } else {
           return originalRequest
         }
@@ -252,6 +259,13 @@ export default {
 
       axios.interceptors.response.use(null, (error) => {
         if (error.url === mockErr) {
+          const originalRequest = error.originalRequest
+          if (error.response.proxy_pass && originalRequest.url.startsWith('/')) {
+            originalRequest.url = error.response.proxy_pass.replace(/\/$/, '') + originalRequest.url
+            return originalAxios.request(originalRequest).catch(err => {
+              return err.response
+            })
+          }
           if (error.useProxy === useProxy) {
             return Promise.reject(useProxy)
           }
